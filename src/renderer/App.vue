@@ -109,6 +109,7 @@
           :branches="branches"
           v-model:source-branch="sourceBranch"
           v-model:target-branches="selectedTargets"
+          @clear-targets="selectedTargets = []"
         />
       </section>
 
@@ -335,6 +336,47 @@ const clearLogs = () => {
   logs.value = [];
 };
 
+const summarizeResults = (results, modeLabel) => {
+  if (!Array.isArray(results) || results.length === 0) {
+    appendLog({
+      message: `同步任务已完成（${modeLabel}）：无有效目标分支`,
+      level: 'warn',
+      timestamp: new Date().toISOString()
+    });
+    return;
+  }
+
+  const oks = results.filter((item) => item.success);
+  const fails = results.filter((item) => !item.success);
+
+  appendLog({
+    message: `同步任务总结（${modeLabel}）：成功 ${oks.length} 个，失败 ${fails.length} 个`,
+    level: fails.length ? 'warn' : 'info',
+    timestamp: new Date().toISOString()
+  });
+
+  if (oks.length) {
+    appendLog({
+      message: `成功分支：${oks.map((item) => item.branch).join('，')}`,
+      level: 'info',
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  if (fails.length) {
+    appendLog({
+      message: `失败分支：${fails
+        .map((item) => `${item.branch}（${item.error || '未知原因'}）`)
+        .join('，')}`,
+      level: 'error',
+      timestamp: new Date().toISOString()
+    });
+    pushNotification('error', `同步失败 ${fails.length} 个分支，请检查日志`);
+  } else {
+    pushNotification('success', `同步完成：成功 ${oks.length} 个分支`);
+  }
+};
+
 const handleStartSync = async () => {
   if (selectedTargets.value.length === 0) return;
   const base = baseBranch.value;
@@ -402,24 +444,7 @@ onMounted(() => {
         break;
       case 'completed':
         syncing.value = false;
-        appendLog({
-          message: `同步任务已完成（${modeLabel}）`,
-          level: 'info',
-          timestamp: now
-        });
-        pushNotification('success', '同步完成');
-        if (Array.isArray(status.results)) {
-          status.results.forEach((item) => {
-            appendLog({
-              message: `${item.branch} ${item.success ? '同步成功' : `同步失败: ${item.error}`}`,
-              level: item.success ? 'info' : 'error',
-              timestamp: new Date().toISOString()
-            });
-            if (!item.success) {
-              pushNotification('error', `${item.branch} 同步失败：${item.error}`);
-            }
-          });
-        }
+        summarizeResults(status.results, modeLabel);
         refreshRepoInfo();
         if (status.mode === 'stash') {
           loadStashList();

@@ -45,8 +45,16 @@ class GitService extends EventEmitter {
 
   async getBranches() {
     this.ensureGitReady();
-    const { all, current } = await this.git.branch();
-    return { branches: all, current };
+    await this.git.fetch(['--all']);
+    const branchSummary = await this.git.branch(['-a']);
+    const current = branchSummary.current;
+    const normalized = branchSummary.all
+      .map((name) => name.replace(/^remotes\/origin\//, '').trim())
+      .filter((name) => name && name !== 'HEAD')
+      .map((name) => name.replace(/^origin\//, ''));
+
+    const unique = Array.from(new Set(normalized));
+    return { branches: unique, current };
   }
 
   async getStashList() {
@@ -110,6 +118,7 @@ class GitService extends EventEmitter {
     }
 
     const branchInfo = await this.git.branch();
+    const branchLocal = await this.git.branchLocal();
     const fallbackBranch = branchInfo.current;
     const branchToRestore = sourceBranch || fallbackBranch;
 
@@ -126,13 +135,41 @@ class GitService extends EventEmitter {
 
     for (const target of targetBranches) {
       const result = { branch: target, success: true, error: null };
+      let cherryPickStarted = false;
       try {
         log(`开始同步到分支 ${target}（模式：${mode}）`);
         await this.git.fetch();
         log(`[${target}] git fetch 完成`);
 
-        await this.git.checkout(target);
-        log(`[${target}] 已切换到目标分支`);
+        let checkedOut = false;
+        if (!branchLocal.all.includes(target)) {
+          try {
+            await this.git.checkout(['-b', target, `origin/${target}`]);
+            log(`[${target}] 本地不存在，已从 origin/${target} 创建并切换`);
+            branchLocal.all.push(target);
+            checkedOut = true;
+          } catch (createError) {
+            throw new Error(
+              `创建或跟踪远端分支失败：${createError?.message ?? createError}`
+            );
+          }
+        }
+
+        if (!checkedOut) {
+          await this.git.checkout(target);
+          log(`[${target}] 已切换到目标分支`);
+        }
+
+        try {
+          await this.git.pull('origin', target, { '--ff-only': null });
+          log(`[${target}] 已拉取远端最新提交`);
+        } catch (pullError) {
+          throw new Error(
+            pullError?.message?.includes('Not possible to fast-forward')
+              ? '远端分支存在新的提交，请先手动拉取并处理后再同步'
+              : `拉取远端分支失败：${pullError?.message ?? pullError}`
+          );
+        }
 
         if (mode === 'branch') {
           await this.git.merge([sourceBranch, '--no-edit']);
@@ -140,6 +177,7 @@ class GitService extends EventEmitter {
           await this.git.push();
           log(`[${target}] 推送成功`);
         } else if (mode === 'commit') {
+          cherryPickStarted = true;
           await this.git.raw(['cherry-pick', commitHash]);
           log(`[${target}] 已应用提交 ${commitHash}`);
           await this.git.push();
@@ -166,9 +204,10 @@ class GitService extends EventEmitter {
         }
       } catch (error) {
         result.success = false;
-        result.error = error?.message ?? String(error);
+        const rawMessage = error?.message ?? String(error);
+        result.error = rawMessage;
         log(`[${target}] 同步失败: ${result.error}`, 'error');
-        if (mode === 'commit') {
+        if (mode === 'commit' && cherryPickStarted) {
           try {
             await this.git.raw(['cherry-pick', '--abort']);
             log(`[${target}] 已回滚 cherry-pick 操作`, 'warn');
