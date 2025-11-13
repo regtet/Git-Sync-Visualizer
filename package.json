@@ -1,0 +1,63 @@
+{
+    "name": "git-sync-visualizer",
+    "version": "0.1.0",
+    "main": "src/main/main.js",
+    "license": "MIT",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "concurrently \"yarn:dev:renderer\" \"yarn:dev:main\"",
+        "dev:renderer": "vite dev --host --config vite.config.js",
+        "dev:main": "wait-on tcp:5173 && cross-env NODE_ENV=development electron .",
+        "build": "yarn build:renderer && yarn build:main",
+        "build:renderer": "vite build --config vite.config.js",
+        "build:main": "cross-env NODE_ENV=production electron-builder",
+        "lint": "eslint \"src/**/*.{js,vue}\" --max-warnings=0"
+    },
+    "dependencies": {
+        "simple-git": "^3.21.0",
+        "vue": "^3.4.27"
+    },
+    "devDependencies": {
+        "@electron/notarize": "^2.3.0",
+        "@vitejs/plugin-vue": "^5.0.4",
+        "concurrently": "^8.2.0",
+        "cross-env": "^7.0.3",
+        "electron": "^29.1.0",
+        "electron-builder": "^24.13.3",
+        "eslint": "^8.56.0",
+        "eslint-plugin-vue": "^9.20.1",
+        "vite": "^5.2.0",
+        "wait-on": "^7.0.1"
+    },
+    "engines": {
+        "node": ">=16 <20",
+        "yarn": ">=1.22.0 <2"
+    },
+    "build": {
+        "appId": "com.example.gitsyncvisualizer",
+        "files": [
+            "dist/",
+            "src/main/",
+            "src/preload.cjs",
+            "package.json"
+        ],
+        "directories": {
+            "output": "release"
+        },
+        "mac": {
+            "category": "public.app-category.developer-tools"
+        },
+        "win": {
+            "target": [
+                "nsis"
+            ]
+        },
+        "linux": {
+            "target": [
+                "AppImage"
+            ],
+            "category": "Development"
+        }
+    }
+}
