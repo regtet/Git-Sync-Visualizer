@@ -349,27 +349,25 @@ const summarizeResults = (results, modeLabel) => {
   const oks = results.filter((item) => item.success);
   const fails = results.filter((item) => !item.success);
 
-  appendLog({
-    message: `同步任务总结（${modeLabel}）：成功 ${oks.length} 个，失败 ${fails.length} 个`,
-    level: fails.length ? 'warn' : 'info',
-    timestamp: new Date().toISOString()
-  });
+  const now = new Date().toISOString();
 
-  if (oks.length) {
+  // 显示成功统计（合并为一条日志）
+  if (oks.length > 0) {
+    const successBranches = oks.map((item) => item.branch).join('\n');
     appendLog({
-      message: `成功分支：${oks.map((item) => item.branch).join('，')}`,
+      message: `成功 ${oks.length} 条\n${successBranches}`,
       level: 'info',
-      timestamp: new Date().toISOString()
+      timestamp: now
     });
   }
 
-  if (fails.length) {
+  // 显示失败统计（合并为一条日志）
+  if (fails.length > 0) {
+    const failBranches = fails.map((item) => item.branch).join('\n');
     appendLog({
-      message: `失败分支：${fails
-        .map((item) => `${item.branch}（${item.error || '未知原因'}）`)
-        .join('，')}`,
+      message: `失败 ${fails.length} 条\n${failBranches}`,
       level: 'error',
-      timestamp: new Date().toISOString()
+      timestamp: now
     });
     pushNotification('error', `同步失败 ${fails.length} 个分支，请检查日志`);
   } else {
