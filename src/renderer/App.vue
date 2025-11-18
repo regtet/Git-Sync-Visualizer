@@ -24,6 +24,13 @@
         >
           {{ syncing ? '同步中...' : '一键同步' }}
         </button>
+        <button
+          v-if="syncing"
+          class="btn danger"
+          @click="handleCancelSync"
+        >
+          中止同步
+        </button>
       </div>
     </header>
 
@@ -423,6 +430,24 @@ const handleStartSync = async () => {
   }
 };
 
+const handleCancelSync = async () => {
+  if (!syncing.value) return;
+  if (!window.electronAPI?.cancelSync) {
+    pushNotification('error', '当前运行环境不支持中止操作');
+    return;
+  }
+  try {
+    const response = await window.electronAPI.cancelSync();
+    if (response?.ok) {
+      pushNotification('warn', '已发出中止指令，当前同步将尽快停止');
+    } else {
+      pushNotification('error', response?.error || '中止同步失败');
+    }
+  } catch (error) {
+    pushNotification('error', error?.message || '中止同步失败');
+  }
+};
+
 onMounted(() => {
   disposeLogListener = window.electronAPI?.onSyncLog((log) => {
     appendLog(log);
@@ -444,6 +469,20 @@ onMounted(() => {
         syncing.value = false;
         summarizeResults(status.results, modeLabel);
         refreshRepoInfo();
+        if (status.mode === 'stash') {
+          loadStashList();
+        }
+        break;
+      case 'cancelled':
+        syncing.value = false;
+        appendLog({
+          message: `同步任务已被用户中止（${modeLabel}）`,
+          level: 'warn',
+          timestamp: now
+        });
+        summarizeResults(status.results, modeLabel);
+        refreshRepoInfo();
+        pushNotification('warn', '同步已中止');
         if (status.mode === 'stash') {
           loadStashList();
         }

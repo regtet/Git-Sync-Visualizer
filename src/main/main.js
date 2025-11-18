@@ -125,14 +125,30 @@ ipcMain.handle('repo:list-stash', async () => {
 ipcMain.handle('sync:start', async (_, payload) => {
     const { mode = 'branch' } = payload ?? {};
     try {
-        withLogRelay('sync:status')({ status: 'running', mode });
-        const results = await gitService.syncBranches(payload, relayLog);
-        withLogRelay('sync:status')({ status: 'completed', mode, results });
-        return { ok: true, results };
+    withLogRelay('sync:status')({ status: 'running', mode });
+    const { results, cancelled } = await gitService.syncBranches(payload, relayLog);
+    withLogRelay('sync:status')({
+      status: cancelled ? 'cancelled' : 'completed',
+      mode,
+      results
+    });
+    return { ok: true, results, cancelled };
     } catch (error) {
         const message = error?.message ?? String(error);
         relayLog({ message, level: 'error', timestamp: new Date().toISOString() });
         withLogRelay('sync:status')({ status: 'failed', mode, message });
         return { ok: false, error: message };
     }
+});
+
+ipcMain.handle('sync:cancel', async () => {
+  try {
+    const cancelled = gitService.cancelSync();
+    if (!cancelled) {
+      return { ok: false, error: '当前没有正在进行的同步任务' };
+    }
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error?.message ?? String(error) };
+  }
 });

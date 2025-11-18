@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   listBranches: () => ipcRenderer.invoke('repo:list-branches'),
   listStashes: () => ipcRenderer.invoke('repo:list-stash'),
   startSync: (payload) => ipcRenderer.invoke('sync:start', payload),
+  cancelSync: () => ipcRenderer.invoke('sync:cancel'),
   onSyncLog: (callback) => {
     const listener = (_event, data) => {
       callback?.(data);
