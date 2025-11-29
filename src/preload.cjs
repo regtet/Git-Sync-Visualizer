@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getRepositoryInfo: () => ipcRenderer.invoke('repo:info'),
   listBranches: () => ipcRenderer.invoke('repo:list-branches'),
   listStashes: () => ipcRenderer.invoke('repo:list-stash'),
+  selectPatchFile: () => ipcRenderer.invoke('patch:select'),
   startSync: (payload) => ipcRenderer.invoke('sync:start', payload),
   cancelSync: () => ipcRenderer.invoke('sync:cancel'),
   onSyncLog: (callback) => {

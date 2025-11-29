@@ -122,6 +122,26 @@ ipcMain.handle('repo:list-stash', async () => {
     }
 });
 
+ipcMain.handle('patch:select', async () => {
+    try {
+        const result = await dialog.showOpenDialog(mainWindow, {
+            properties: ['openFile'],
+            filters: [
+                { name: 'Patch files', extensions: ['patch', 'diff'] },
+                { name: 'All Files', extensions: ['*'] }
+            ]
+        });
+
+        if (result.canceled || !result.filePaths?.length) {
+            return { ok: false, canceled: true };
+        }
+
+        return { ok: true, data: { path: result.filePaths[0] } };
+    } catch (error) {
+        return { ok: false, error: error?.message ?? String(error) };
+    }
+});
+
 ipcMain.handle('sync:start', async (_, payload) => {
     const { mode = 'branch' } = payload ?? {};
     try {

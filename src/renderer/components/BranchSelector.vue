@@ -4,7 +4,7 @@
       <h2>分支选择</h2>
     </header>
     <section v-if="branches.list.length" class="fields">
-      <div class="field">
+      <div v-if="!props.hideSource" class="field">
         <label for="source-branch">源分支</label>
         <select id="source-branch" v-model="localSource" @change="onSourceChange">
           <option disabled value="">请选择源分支</option>
@@ -76,6 +76,10 @@ const props = defineProps({
   targetBranches: {
     type: Array,
     default: () => []
+  },
+  hideSource: {
+    type: Boolean,
+    default: false
   }
 });
 

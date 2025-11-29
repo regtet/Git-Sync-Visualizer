@@ -115,7 +115,9 @@ class GitService extends EventEmitter {
             targetBranches,
             commitHash,
             stashRef,
-            stashMessage
+            stashMessage,
+            patchFile,
+            patchCommitMessage
         } = options;
 
         if (!targetBranches?.length) {
@@ -132,6 +134,24 @@ class GitService extends EventEmitter {
 
         if (mode === 'stash' && !stashRef) {
             throw new Error('请选择需要同步的储藏记录');
+        }
+
+        let patchContext = null;
+        if (mode === 'patch') {
+            if (!patchFile?.trim()) {
+                throw new Error('请提供补丁文件路径');
+            }
+            const normalized = path.isAbsolute(patchFile)
+                ? patchFile
+                : path.resolve(this.repoPath, patchFile);
+            if (!existsSync(normalized)) {
+                throw new Error(`找不到补丁文件：${normalized}`);
+            }
+            patchContext = {
+                path: normalized,
+                label: path.basename(normalized),
+                commitMessage: patchCommitMessage?.trim()
+            };
         }
 
         if (this.isSyncing) {
@@ -170,6 +190,7 @@ class GitService extends EventEmitter {
             for (const target of targetBranches) {
                 const result = { branch: target, success: true, error: null };
                 let cherryPickStarted = false;
+                let patchApplied = false;
                 try {
                     checkCancelled();
                     log(`开始同步到分支 ${target}（模式：${mode}）`);
@@ -238,6 +259,33 @@ class GitService extends EventEmitter {
                         } else {
                             log(`[${target}] 储藏未引入新增变更`, 'warn');
                         }
+                    } else if (mode === 'patch') {
+                        if (!patchContext) {
+                            throw new Error('补丁参数缺失，无法执行同步');
+                        }
+                        log(`[${target}] 正在检查补丁 ${patchContext.label}`);
+                        await this.git.raw(['apply', '--check', patchContext.path]);
+                        log(`[${target}] 补丁检查通过`);
+                        await this.git.raw(['apply', patchContext.path]);
+                        patchApplied = true;
+                        log(`[${target}] 已应用补丁 ${patchContext.label}`);
+                        const status = await this.git.status();
+                        if (!status.isClean()) {
+                            await this.git.add(['-A']);
+                            const commitMessage =
+                                patchContext.commitMessage?.length
+                                    ? patchContext.commitMessage
+                                    : `sync: apply patch ${patchContext.label}`;
+                            await this.git.commit(commitMessage);
+                            log(`[${target}] 已提交补丁变更`);
+                            await this.git.push();
+                            log(`[${target}] 推送成功`);
+                        } else {
+                            log(
+                                `[${target}] 补丁未引入新的文件改动（可能已存在相同改动）`,
+                                'warn'
+                            );
+                        }
                     } else {
                         throw new Error(`未知同步模式：${mode}`);
                     }
@@ -259,6 +307,16 @@ class GitService extends EventEmitter {
                                 log(`[${target}] 已回滚 cherry-pick 操作`, 'warn');
                             } catch (abortError) {
                                 log(`[${target}] 回滚 cherry-pick 失败: ${abortError?.message ?? abortError}`, 'error');
+                            }
+                        } else if (mode === 'patch' && patchApplied && patchContext) {
+                            try {
+                                await this.git.raw(['apply', '-R', patchContext.path]);
+                                log(`[${target}] 已回滚补丁 ${patchContext.label}`, 'warn');
+                            } catch (revertError) {
+                                log(
+                                    `[${target}] 回滚补丁失败: ${revertError?.message ?? revertError}`,
+                                    'error'
+                                );
                             }
                         }
                     }

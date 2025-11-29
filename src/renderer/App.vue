@@ -112,10 +112,35 @@
           </div>
         </transition>
 
+        <transition name="fade">
+          <div v-if="syncMode === 'patch'" class="mode-extra patch-extra">
+            <label for="patch-path">补丁文件</label>
+            <div class="file-row">
+              <input
+                id="patch-path"
+                v-model="patchFilePath"
+                placeholder="选择或输入补丁文件路径，例如 D:\sync\20251120-feature-bg.patch"
+              />
+              <button class="btn ghost sm" type="button" @click="handleBrowsePatch">
+                选择文件
+              </button>
+            </div>
+            <p class="hint">建议命名：日期+来源分支+描述，方便追溯来源</p>
+            <label for="patch-message">提交信息</label>
+            <input
+              id="patch-message"
+              v-model="patchCommitMessage"
+              placeholder="例如：sync: apply patch 20251120-feature-bg"
+            />
+            <p class="hint">留空时会自动使用补丁文件名生成提交信息</p>
+          </div>
+        </transition>
+
         <branch-selector
           :branches="branches"
           v-model:source-branch="sourceBranch"
           v-model:target-branches="selectedTargets"
+          :hide-source="syncMode === 'patch'"
           @clear-targets="selectedTargets = []"
         />
       </section>
@@ -141,7 +166,8 @@ const themes = [
 const modeOptions = [
   { value: 'branch', label: '分支合并' },
   { value: 'commit', label: '精准提交' },
-  { value: 'stash', label: '同步储藏' }
+  { value: 'stash', label: '同步储藏' },
+  { value: 'patch', label: '补丁同步' }
 ];
 
 const repoInfo = ref(null);
@@ -161,6 +187,8 @@ const commitHash = ref('');
 const selectedStash = ref('');
 const stashList = ref([]);
 const stashLoading = ref(false);
+const patchFilePath = ref('');
+const patchCommitMessage = ref('');
 
 const notifications = ref([]);
 const currentTheme = ref(localStorage.getItem('gsv-theme') || themes[0].value);
@@ -177,6 +205,7 @@ const isSyncDisabled = computed(() => {
   if (syncMode.value === 'branch' && !base) return true;
   if (syncMode.value === 'commit' && !commitHash.value.trim()) return true;
   if (syncMode.value === 'stash' && !selectedStash.value) return true;
+  if (syncMode.value === 'patch' && !patchFilePath.value.trim()) return true;
   return false;
 });
 
@@ -229,8 +258,45 @@ const resolveModeLabel = (mode) => {
       return '精准提交';
     case 'stash':
       return '同步储藏';
+    case 'patch':
+      return '补丁同步';
     default:
       return mode || '未知模式';
+  }
+};
+
+const extractFileName = (fullPath = '') => {
+  if (!fullPath) return '';
+  const parts = fullPath.split(/[/\\]+/);
+  return parts[parts.length - 1] ?? '';
+};
+
+const buildPatchCommitMessage = (fullPath) => {
+  const fileName = extractFileName(fullPath);
+  return fileName ? `sync: apply patch ${fileName}` : 'sync: apply patch';
+};
+
+const setPatchFilePath = (filePath) => {
+  patchFilePath.value = filePath;
+  if (!patchCommitMessage.value.trim()) {
+    patchCommitMessage.value = buildPatchCommitMessage(filePath);
+  }
+};
+
+const handleBrowsePatch = async () => {
+  if (!window.electronAPI?.selectPatchFile) {
+    pushNotification('error', '当前运行环境不支持选择补丁文件');
+    return;
+  }
+  try {
+    const response = await window.electronAPI.selectPatchFile();
+    if (response?.ok && response.data?.path) {
+      setPatchFilePath(response.data.path);
+    } else if (!response?.canceled && response?.error) {
+      pushNotification('error', response.error);
+    }
+  } catch (error) {
+    pushNotification('error', error?.message || '选择补丁文件失败');
   }
 };
 
@@ -258,6 +324,18 @@ const loadStashList = async () => {
   }
 };
 
+watch(patchFilePath, (value) => {
+  if (!value?.trim()) {
+    if (!patchCommitMessage.value.trim()) {
+      patchCommitMessage.value = '';
+    }
+    return;
+  }
+  if (!patchCommitMessage.value.trim()) {
+    patchCommitMessage.value = buildPatchCommitMessage(value);
+  }
+});
+
 watch(syncMode, (mode) => {
   if (mode !== 'commit') {
     commitHash.value = '';
@@ -266,6 +344,10 @@ watch(syncMode, (mode) => {
     selectedStash.value = '';
   } else {
     loadStashList();
+  }
+  if (mode !== 'patch') {
+    patchFilePath.value = '';
+    patchCommitMessage.value = '';
   }
 });
 
@@ -320,6 +402,8 @@ const handleSelectRepo = async () => {
   syncMode.value = 'branch';
   commitHash.value = '';
   selectedStash.value = '';
+  patchFilePath.value = '';
+  patchCommitMessage.value = '';
   const result = await window.electronAPI?.selectRepository();
   if (result?.canceled) return;
   if (result?.error) {
@@ -417,6 +501,16 @@ const handleStartSync = async () => {
       const selected = stashList.value.find((item) => item.reference === selectedStash.value);
       if (selected) {
         payload.stashMessage = selected.message || selected.rawMessage || '';
+      }
+    }
+    if (syncMode.value === 'patch') {
+      if (!patchFilePath.value.trim()) {
+        pushNotification('error', '请先选择补丁文件');
+        return;
+      }
+      payload.patchFile = patchFilePath.value.trim();
+      if (patchCommitMessage.value.trim()) {
+        payload.patchCommitMessage = patchCommitMessage.value.trim();
       }
     }
     const response = await window.electronAPI.startSync(payload);
@@ -735,6 +829,22 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 10px;
   align-items: center;
+}
+
+.file-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.file-row input {
+  flex: 1;
+}
+
+.patch-extra .hint {
+  margin: -6px 0 4px;
+  font-size: 12px;
+  color: rgba(148, 163, 184, 0.8);
 }
 
 .btn.sm {
