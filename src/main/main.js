@@ -122,6 +122,15 @@ ipcMain.handle('repo:list-stash', async () => {
     }
 });
 
+ipcMain.handle('repo:check-remote-branches', async (_, branchNames) => {
+    try {
+        const result = await gitService.checkRemoteBranches(branchNames);
+        return { ok: true, data: result };
+    } catch (error) {
+        return { ok: false, error: error?.message ?? String(error) };
+    }
+});
+
 ipcMain.handle('patch:select', async () => {
     try {
         const result = await dialog.showOpenDialog(mainWindow, {

@@ -139,7 +139,7 @@ const filteredTargets = computed(() => {
 const sanitizeBranchName = (value = '') =>
   value.replace(/（[^）]*）/g, '').replace(/\([^)]*\)/g, '').trim();
 
-const applyBulkInput = () => {
+const applyBulkInput = async () => {
   const entries = bulkInput.value
     .split(/\r?\n/)
     .map((line) => sanitizeBranchName(line))
@@ -150,30 +150,48 @@ const applyBulkInput = () => {
     return;
   }
 
-  const available = props.branches.list;
-  const valid = [];
-  const invalid = [];
+  // 显示查询状态
+  bulkFeedback.value = '正在查询远程分支...';
 
-  entries.forEach((name) => {
-    if (available.includes(name)) {
-      valid.push(name);
-    } else {
-      invalid.push(name);
+  try {
+    // 查询远程分支验证分支是否存在
+    if (!window.electronAPI?.checkRemoteBranches) {
+      bulkFeedback.value = '当前环境不支持远程分支查询';
+      return;
     }
-  });
 
-  if (valid.length) {
-    const merged = Array.from(new Set([...localTargets.value, ...valid]));
-    localTargets.value = merged;
-    emitTargetBranches(merged);
-  }
+    const result = await window.electronAPI.checkRemoteBranches(entries);
 
-  if (invalid.length && valid.length) {
-    bulkFeedback.value = `已添加 ${valid.length} 个分支，未找到：${invalid.join('，')}`;
-  } else if (invalid.length) {
-    bulkFeedback.value = `未找到分支：${invalid.join('，')}`;
-  } else {
-    bulkFeedback.value = `已添加 ${valid.length} 个分支`;
+    if (!result?.ok) {
+      bulkFeedback.value = `查询失败：${result?.error || '未知错误'}`;
+      return;
+    }
+
+    const { exists, notExists } = result.data || { exists: [], notExists: [] };
+
+    // 只添加在远程存在的分支
+    if (exists.length > 0) {
+      const merged = Array.from(new Set([...localTargets.value, ...exists]));
+      localTargets.value = merged;
+      emitTargetBranches(merged);
+    }
+
+    // 生成反馈信息
+    const parts = [];
+    if (exists.length > 0) {
+      parts.push(`已添加 ${exists.length} 个分支`);
+    }
+    if (notExists.length > 0) {
+      parts.push(`未找到：${notExists.join('，')}`);
+    }
+
+    if (parts.length > 0) {
+      bulkFeedback.value = parts.join('；');
+    } else {
+      bulkFeedback.value = '未添加任何分支';
+    }
+  } catch (error) {
+    bulkFeedback.value = `查询远程分支失败：${error?.message || '未知错误'}`;
   }
 };
 
