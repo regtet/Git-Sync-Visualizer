@@ -34,12 +34,101 @@ yarn dev
 - Vite 启动渲染进程开发服务器；
 - Electron 自动打开桌面窗口，可实时查看调试输出。
 
-### 补丁同步模式小贴士
+### 补丁同步模式使用指南
 
-- 建议使用 `日期-来源分支-描述.patch` 的命名规范，例如 `20251120-feature-bg-sync-bg.patch`，后续溯源时可以快速定位补丁来自哪一天、哪一个分支。
-- 如果只想同步部分改动，可先执行 `git diff HEAD^ HEAD -- path/to/file > temp.patch`，再用文本编辑器保留需要的 diff 片段，避免携带无关修改。
-- 在应用补丁前，界面会自动执行 `git apply --check` 预检，通过后才会真正应用并提交；默认提交信息为 `sync: apply patch <文件名>`，也可以在界面手动覆盖。
-- 同步完成后会把补丁变更 `add → commit → push` 到每个目标分支，若补丁没有带来新的文件改动，会在日志中提示说明。
+#### 如何准备补丁文件
+
+修改代码后，根据你的工作流程选择以下方法之一生成补丁：
+
+**场景 1：已提交的代码改动**
+```bash
+# 方法 A：生成最近一次提交的补丁（推荐）
+git format-patch -1 HEAD --stdout > 20251120-feature-bg.patch
+
+# 方法 B：生成指定提交的补丁
+git format-patch -1 <commit-hash> --stdout > my-patch.patch
+
+# 方法 C：生成多个提交的补丁（例如最近 3 个提交）
+git format-patch -3 HEAD --stdout > multi-commits.patch
+```
+
+**场景 2：未提交的工作区改动**
+```bash
+# 方法 A：生成所有未提交改动的补丁（包括已暂存和未暂存的）
+git diff > my-changes.patch
+
+# 方法 B：只生成已暂存（staged）的改动
+git diff --cached > staged-changes.patch
+
+# 方法 C：生成未暂存的改动
+git diff HEAD > unstaged-changes.patch
+```
+
+**场景 3：特定文件或目录的改动**
+```bash
+# 生成特定文件的补丁
+git diff HEAD -- path/to/file.js > file-only.patch
+
+# 生成特定目录的补丁
+git diff HEAD -- src/components/ > components.patch
+
+# 生成多个指定文件的补丁
+git diff HEAD -- file1.js file2.js > multiple-files.patch
+```
+
+**场景 4：两个提交之间的差异**
+```bash
+# 生成两个提交之间的所有差异
+git diff <commit1> <commit2> > range-diff.patch
+
+# 生成从某个提交到当前 HEAD 的差异
+git diff <commit-hash> HEAD > since-commit.patch
+
+# 生成两个分支之间的差异
+git diff branch1..branch2 > branch-diff.patch
+```
+
+**场景 5：已提交但想修改的补丁**
+```bash
+# 如果你已经提交了代码，但想生成补丁用于同步到其他分支
+# 先找到提交哈希
+git log --oneline
+
+# 然后生成该提交的补丁
+git format-patch -1 <commit-hash> --stdout > my-patch.patch
+```
+
+#### 补丁文件命名建议
+
+建议使用 `日期-来源分支-描述.patch` 的命名规范：
+- ✅ `20251120-feature-bg-sync-bg.patch` - 清晰明了
+- ✅ `20251120-main-fix-bug.patch` - 包含日期、分支、描述
+- ❌ `patch.patch` - 不推荐，难以追溯
+
+#### 使用技巧
+
+1. **只同步部分改动**：先生成完整补丁，然后用文本编辑器打开，删除不需要的 diff 片段，只保留需要的部分。
+
+2. **验证补丁**：生成补丁后，可以用以下命令检查补丁是否有效：
+   ```bash
+   git apply --check my-patch.patch
+   ```
+
+3. **查看补丁内容**：生成补丁后可以查看内容确认：
+   ```bash
+   # Windows
+   type my-patch.patch
+
+   # Linux/Mac
+   cat my-patch.patch
+   ```
+
+#### 在应用中使用补丁
+
+- 在应用补丁前，界面会自动执行 `git apply --check` 预检，通过后才会真正应用并提交
+- 默认提交信息为 `sync: apply patch <文件名>`，也可以在界面手动覆盖
+- 同步完成后会把补丁变更 `add → commit → push` 到每个目标分支
+- 若补丁没有带来新的文件改动，会在日志中提示说明
 
 ### 构建发行版
 

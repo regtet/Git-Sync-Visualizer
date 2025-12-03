@@ -90,13 +90,20 @@ class GitService extends EventEmitter {
         const branchSummary = await this.git.branch(['-a']);
 
         // 构建远程分支名集合（使用与 getBranches 相同的处理逻辑）
+        // 同时维护一个「小写分支名 -> 实际分支名」的映射，用于忽略大小写匹配
         const remoteBranchSet = new Set();
+        const remoteBranchMap = new Map(); // key: lower-case name, value: real case name
         branchSummary.all
             .filter((name) => name.startsWith('remotes/'))
             .forEach((name) => {
                 const normalized = name.replace(/^remotes\/[^/]+\//, '').trim();
                 if (normalized && normalized !== 'HEAD' && !normalized.includes('->')) {
                     remoteBranchSet.add(normalized);
+                    const lower = normalized.toLowerCase();
+                    // 如果多个远程里有同名（大小写不同）分支，保留第一次出现的即可
+                    if (!remoteBranchMap.has(lower)) {
+                        remoteBranchMap.set(lower, normalized);
+                    }
                 }
             });
 
@@ -106,9 +113,20 @@ class GitService extends EventEmitter {
 
         branchNames.forEach((branchName) => {
             const trimmed = branchName.trim();
-            if (trimmed && remoteBranchSet.has(trimmed)) {
+            if (!trimmed) return;
+
+            // 先尝试大小写完全匹配
+            if (remoteBranchSet.has(trimmed)) {
                 exists.push(trimmed);
-            } else if (trimmed) {
+                return;
+            }
+
+            // 再尝试忽略大小写匹配
+            const lower = trimmed.toLowerCase();
+            const realName = remoteBranchMap.get(lower);
+            if (realName) {
+                exists.push(realName);
+            } else {
                 notExists.push(trimmed);
             }
         });
