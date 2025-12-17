@@ -450,26 +450,84 @@ class GitService extends EventEmitter {
                         result.error = '用户已中止';
                         log(`[${target}] 同步已被中止`, 'warn');
                     } else {
-                        result.success = false;
                         const rawMessage = error?.message ?? String(error);
-                        result.error = rawMessage;
-                        log(`[${target}] 同步失败: ${result.error}`, 'error');
-                        if (mode === 'commit' && cherryPickStarted) {
+                        
+                        // 检测 cherry-pick 空提交的情况（代码已经和需要同步的一样了）
+                        if (rawMessage.includes('cherry-pick is now empty') || 
+                            rawMessage.includes('nothing to commit') && rawMessage.includes('cherry-pick')) {
+                            // 执行 cherry-pick --skip 跳过空提交
                             try {
-                                await this.git.raw(['cherry-pick', '--abort']);
-                                log(`[${target}] 已回滚 cherry-pick 操作`, 'warn');
-                            } catch (abortError) {
-                                log(`[${target}] 回滚 cherry-pick 失败: ${abortError?.message ?? abortError}`, 'error');
+                                await this.git.raw(['cherry-pick', '--skip']);
+                                log(`[${target}] 该分支已包含相同的更改，无需重复同步（已自动跳过）`, 'info');
+                                result.success = true;
+                                result.error = null;
+                            } catch (skipError) {
+                                log(`[${target}] 跳过空提交失败: ${skipError?.message ?? skipError}`, 'warn');
+                                result.success = true; // 仍然标记为成功，因为代码已经一致
+                                result.error = null;
                             }
-                        } else if (mode === 'patch' && patchApplied && patchContext) {
-                            try {
-                                await this.git.raw(['apply', '-R', patchContext.path]);
-                                log(`[${target}] 已回滚补丁 ${patchContext.label}`, 'warn');
-                            } catch (revertError) {
-                                log(
-                                    `[${target}] 回滚补丁失败: ${revertError?.message ?? revertError}`,
-                                    'error'
-                                );
+                        }
+                        // 检测网络超时错误，自动重试
+                        else if (rawMessage.includes('Connection timed out') || 
+                                 rawMessage.includes('Could not read from remote repository') ||
+                                 rawMessage.includes('Connection refused') ||
+                                 rawMessage.includes('Network is unreachable')) {
+                            log(`[${target}] 网络连接超时，正在重试...`, 'warn');
+                            
+                            // 尝试重试一次
+                            let retrySuccess = false;
+                            for (let retryCount = 1; retryCount <= 2; retryCount++) {
+                                try {
+                                    checkCancelled();
+                                    log(`[${target}] 第 ${retryCount} 次重试推送...`, 'info');
+                                    await new Promise(resolve => setTimeout(resolve, 2000)); // 等待2秒后重试
+                                    await this.git.push();
+                                    log(`[${target}] 重试推送成功！`, 'info');
+                                    retrySuccess = true;
+                                    break;
+                                } catch (retryError) {
+                                    const retryMsg = retryError?.message ?? String(retryError);
+                                    if (retryMsg.includes('Connection timed out') || 
+                                        retryMsg.includes('Could not read from remote repository') ||
+                                        retryMsg.includes('Connection refused') ||
+                                        retryMsg.includes('Network is unreachable')) {
+                                        log(`[${target}] 第 ${retryCount} 次重试失败，网络仍不可用`, 'warn');
+                                    } else {
+                                        log(`[${target}] 重试时发生其他错误: ${retryMsg}`, 'error');
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            if (retrySuccess) {
+                                result.success = true;
+                                result.error = null;
+                            } else {
+                                result.success = false;
+                                result.error = '网络连接失败，请检查网络后重试';
+                                log(`[${target}] 同步失败: 网络连接超时，多次重试后仍失败`, 'error');
+                            }
+                        } else {
+                            result.success = false;
+                            result.error = rawMessage;
+                            log(`[${target}] 同步失败: ${result.error}`, 'error');
+                            if (mode === 'commit' && cherryPickStarted) {
+                                try {
+                                    await this.git.raw(['cherry-pick', '--abort']);
+                                    log(`[${target}] 已回滚 cherry-pick 操作`, 'warn');
+                                } catch (abortError) {
+                                    log(`[${target}] 回滚 cherry-pick 失败: ${abortError?.message ?? abortError}`, 'error');
+                                }
+                            } else if (mode === 'patch' && patchApplied && patchContext) {
+                                try {
+                                    await this.git.raw(['apply', '-R', patchContext.path]);
+                                    log(`[${target}] 已回滚补丁 ${patchContext.label}`, 'warn');
+                                } catch (revertError) {
+                                    log(
+                                        `[${target}] 回滚补丁失败: ${revertError?.message ?? revertError}`,
+                                        'error'
+                                    );
+                                }
                             }
                         }
                     }
