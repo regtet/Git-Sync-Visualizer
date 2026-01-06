@@ -20,7 +20,7 @@
     </div>
 </template>
 <script setup>
-import { onUpdated, ref } from 'vue';
+import { onUpdated, onMounted, onBeforeUnmount, ref } from 'vue';
 
 const emit = defineEmits(['clear']);
 
@@ -36,6 +36,8 @@ defineProps({
 });
 
 const scrollRef = ref(null);
+const isUserAtBottom = ref(true);
+const scrollThreshold = 50; // 距离底部50px内认为是在底部
 
 const formatTime = (timestamp) => {
     if (!timestamp) return '';
@@ -46,9 +48,39 @@ const formatTime = (timestamp) => {
     }
 };
 
-onUpdated(() => {
+const checkIfAtBottom = () => {
+    const el = scrollRef.value;
+    if (!el) return;
+    
+    const { scrollTop, scrollHeight, clientHeight } = el;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    isUserAtBottom.value = distanceFromBottom <= scrollThreshold;
+};
+
+const handleScroll = () => {
+    checkIfAtBottom();
+};
+
+onMounted(() => {
     const el = scrollRef.value;
     if (el) {
+        el.addEventListener('scroll', handleScroll);
+        // 初始状态认为在底部
+        isUserAtBottom.value = true;
+    }
+});
+
+onBeforeUnmount(() => {
+    const el = scrollRef.value;
+    if (el) {
+        el.removeEventListener('scroll', handleScroll);
+    }
+});
+
+onUpdated(() => {
+    const el = scrollRef.value;
+    if (el && isUserAtBottom.value) {
+        // 只有当用户在底部时才自动滚动
         el.scrollTop = el.scrollHeight;
     }
 });
