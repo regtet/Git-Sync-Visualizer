@@ -541,11 +541,14 @@ class GitService extends EventEmitter {
             }
 
             // 切回源分支，保持状态
-            try {
-                await this.git.checkout(branchToRestore);
-                log(`已切回分支 ${branchToRestore}`);
-            } catch (error) {
-                log(`切回源分支失败: ${error?.message ?? error}`, 'warn');
+            // 精准提交模式下不再强制切回源分支，避免打断当前工作分支
+            if (mode !== 'commit') {
+                try {
+                    await this.git.checkout(branchToRestore);
+                    log(`已切回分支 ${branchToRestore}`);
+                } catch (error) {
+                    log(`切回源分支失败: ${error?.message ?? error}`, 'warn');
+                }
             }
 
             if (this.cancelRequested) {

@@ -136,8 +136,22 @@ const filteredTargets = computed(() => {
   return Array.from(new Set([...selected, ...matched]));
 });
 
-const sanitizeBranchName = (value = '') =>
-  value.replace(/（[^）]*）/g, '').replace(/\([^)]*\)/g, '').trim();
+const sanitizeBranchName = (value = '') => {
+  if (!value) return '';
+
+  let v = value;
+
+  // 去掉中英文括号中的备注
+  v = v.replace(/（[^）]*）/g, '').replace(/\([^)]*\)/g, '');
+
+  // 处理类似「we-camapg -3倍」「we-necklacepg 2倍」「we-conchapg 2倍」这类带倍数说明的文案
+  // - 可选的前导空格和连接符（-、–、—）
+  // - 阿拉伯数字或中文数字（支持 0-9 和 一二三四五六七八九十百千万）
+  // - 结尾的「倍」字
+  v = v.replace(/\s*[-–—]?\s*[0-9一二三四五六七八九十百千万]+倍\s*$/u, '');
+
+  return v.trim();
+};
 
 const applyBulkInput = async () => {
   const entries = bulkInput.value

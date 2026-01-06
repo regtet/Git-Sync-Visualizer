@@ -140,7 +140,7 @@
           :branches="branches"
           v-model:source-branch="sourceBranch"
           v-model:target-branches="selectedTargets"
-          :hide-source="syncMode === 'patch'"
+          :hide-source="syncMode === 'patch' || syncMode === 'commit'"
           @clear-targets="selectedTargets = []"
         />
       </section>
