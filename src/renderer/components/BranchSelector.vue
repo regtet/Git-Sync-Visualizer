@@ -17,7 +17,7 @@
           </option>
         </select>
       </div>
-      <div class="field">
+      <div class="field target-field">
         <label>目标分支</label>
         <input
           v-model.trim="targetSearch"
@@ -233,6 +233,8 @@ const onSourceChange = () => {
   flex-direction: column;
   gap: 20px;
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 header h2 {
@@ -254,6 +256,8 @@ header h2 {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .field label {
@@ -322,16 +326,24 @@ select {
   color: var(--warning);
 }
 
+.target-field {
+  flex: 1;
+  min-height: 0;
+}
+
 .target-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 10px;
-  max-height: 220px;
+  flex: 1;
+  min-height: 0;
+  max-height: 100%;
   padding: 12px;
   background: color-mix(in srgb, var(--surface-muted) 70%, transparent);
   border-radius: 14px;
   border: 1px dashed var(--border);
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .target-item {
@@ -353,6 +365,8 @@ select {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .empty {

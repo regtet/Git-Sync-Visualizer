@@ -136,13 +136,15 @@
           </div>
         </transition>
 
-        <branch-selector
-          :branches="branches"
-          v-model:source-branch="sourceBranch"
-          v-model:target-branches="selectedTargets"
-          :hide-source="syncMode === 'patch' || syncMode === 'commit'"
-          @clear-targets="selectedTargets = []"
-        />
+        <div class="branch-selector-wrapper">
+          <branch-selector
+            :branches="branches"
+            v-model:source-branch="sourceBranch"
+            v-model:target-branches="selectedTargets"
+            :hide-source="syncMode === 'patch' || syncMode === 'commit'"
+            @clear-targets="selectedTargets = []"
+          />
+        </div>
       </section>
 
       <section class="card log-card">
@@ -759,6 +761,17 @@ onBeforeUnmount(() => {
 
 .mode-card {
   min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.branch-selector-wrapper {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .log-card {
